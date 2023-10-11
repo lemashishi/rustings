@@ -1,0 +1,1 @@
+E:\RustDemo\testdemo2\rustlings\target\release\rustlings.exe: E:\RustDemo\testdemo2\rustlings\src\exercise.rs E:\RustDemo\testdemo2\rustlings\src\main.rs E:\RustDemo\testdemo2\rustlings\src\project.rs E:\RustDemo\testdemo2\rustlings\src\run.rs E:\RustDemo\testdemo2\rustlings\src\ui.rs E:\RustDemo\testdemo2\rustlings\src\verify.rs
