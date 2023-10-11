@@ -1,4 +1,8 @@
-<div class="oranda-hide">
+[![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-718a45dd9cf7e7f842a935f5ebbe5719a5e09af4491e668f4dbf3b35d5cca122.svg)](https://classroom.github.com/online_ide?assignment_repo_id=12276594&assignment_repo_type=AssignmentRepo)
+# 2023秋冬季操作系统训练营
+
+[**第一阶段训练安排**](https://github.com/LearningOS/rust-based-os-comp2023/blob/main/2023-autumn-scheduling-1.md)
+- [rustlings Rust编程训练教室](https://classroom.github.com/a/gbr5Jk7V)
 
 # rustlings 🦀❤️
 
@@ -18,7 +22,7 @@ Alternatively, for a first-time Rust learner, there are several other resources:
 _Note: If you're on MacOS, make sure you've installed Xcode and its developer tools by typing `xcode-select --install`._
 _Note: If you're on Linux, make sure you've installed gcc. Deb: `sudo apt install gcc`. Yum: `sudo yum -y install gcc`._
 
-You will need to have Rust installed. You can get it by visiting <https://rustup.rs>. This'll also install Cargo, Rust's package/project manager.
+You will need to have Rust installed. You can get it by visiting https://rustup.rs. This'll also install Cargo, Rust's package/project manager.
 
 ## MacOS/Linux
 
@@ -27,7 +31,6 @@ Just run:
 ```bash
 curl -L https://raw.githubusercontent.com/rust-lang/rustlings/main/install.sh | bash
 ```
-
 Or if you want it to be installed to a different path:
 
 ```bash
@@ -41,8 +44,8 @@ This will install Rustlings and give you access to the `rustlings` command. Run 
 Basically: Clone the repository at the latest tag, finally run `nix develop` or `nix-shell`.
 
 ```bash
-# find out the latest version at https://github.com/rust-lang/rustlings/releases/latest (on edit 5.6.1)
-git clone -b 5.6.1 --depth 1 https://github.com/rust-lang/rustlings
+# find out the latest version at https://github.com/rust-lang/rustlings/releases/latest (on edit 5.5.1)
+git clone -b 5.5.1 --depth 1 https://github.com/rust-lang/rustlings
 cd rustlings
 # if nix version > 2.3
 nix develop
@@ -79,8 +82,8 @@ If you get a permission denied message, you might have to exclude the directory 
 Basically: Clone the repository at the latest tag, run `cargo install --path .`.
 
 ```bash
-# find out the latest version at https://github.com/rust-lang/rustlings/releases/latest (on edit 5.6.1)
-git clone -b 5.6.1 --depth 1 https://github.com/rust-lang/rustlings
+# find out the latest version at https://github.com/rust-lang/rustlings/releases/latest (on edit 5.5.1)
+git clone -b 5.5.1 --depth 1 https://github.com/rust-lang/rustlings
 cd rustlings
 cargo install --force --path .
 ```
@@ -173,8 +176,12 @@ Now you should be done!
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/rust-lang/rustlings/blob/main/CONTRIBUTING.md).
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+Development-focused discussion about Rustlings happens in the [**rustlings** stream](https://rust-lang.zulipchat.com/#narrow/stream/334454-rustlings)
+on the [Rust Project Zulip](https://rust-lang.zulipchat.com). Feel free to start a new thread there
+if you have ideas or suggestions!
 
 ## Contributors ✨
 
-Thanks goes to the wonderful people listed in [AUTHORS.md](https://github.com/rust-lang/rustlings/blob/main/AUTHORS.md) 🎉
+Thanks goes to the wonderful people listed in [AUTHORS.md](./AUTHORS.md) 🎉

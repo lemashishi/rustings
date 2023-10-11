@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::time::Duration;
 
 use crate::exercise::{Exercise, Mode};
 use crate::verify::test;
@@ -14,6 +13,7 @@ pub fn run(exercise: &Exercise, verbose: bool) -> Result<(), ()> {
         Mode::Test => test(exercise, verbose)?,
         Mode::Compile => compile_and_run(exercise)?,
         Mode::Clippy => compile_and_run(exercise)?,
+        Mode::BuildScript => test(exercise, verbose)?,
     }
     Ok(())
 }
@@ -37,7 +37,7 @@ pub fn reset(exercise: &Exercise) -> Result<(), ()> {
 fn compile_and_run(exercise: &Exercise) -> Result<(), ()> {
     let progress_bar = ProgressBar::new_spinner();
     progress_bar.set_message(format!("Compiling {exercise}..."));
-    progress_bar.enable_steady_tick(Duration::from_millis(100));
+    progress_bar.enable_steady_tick(100);
 
     let compilation_result = exercise.compile();
     let compilation = match compilation_result {

@@ -2,10 +2,11 @@ use crate::exercise::{Exercise, ExerciseList};
 use crate::project::RustAnalyzerProject;
 use crate::run::{reset, run};
 use crate::verify::verify;
-use clap::{Parser, Subcommand};
+use argh::FromArgs;
 use console::Emoji;
 use notify::DebouncedEvent;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, prelude::*};
@@ -16,6 +17,7 @@ use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use std::time::{UNIX_EPOCH, SystemTime};
 
 #[macro_use]
 mod ui;
@@ -25,69 +27,138 @@ mod project;
 mod run;
 mod verify;
 
+// In sync with crate version
+const VERSION: &str = "5.5.1";
+
+#[derive(FromArgs, PartialEq, Debug)]
 /// Rustlings is a collection of small exercises to get you used to writing and reading Rust code
-#[derive(Parser)]
-#[command(version)]
 struct Args {
-    /// Show outputs from the test exercises
-    #[arg(long)]
+    /// show outputs from the test exercises
+    #[argh(switch)]
     nocapture: bool,
-    #[command(subcommand)]
-    command: Option<Subcommands>,
+    /// show the executable version
+    #[argh(switch, short = 'v')]
+    version: bool,
+    #[argh(subcommand)]
+    nested: Option<Subcommands>,
 }
 
-#[derive(Subcommand)]
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand)]
 enum Subcommands {
-    /// Verify all exercises according to the recommended order
-    Verify,
-    /// Rerun `verify` when files were edited
-    Watch {
-        /// Show hints on success
-        #[arg(long)]
-        success_hints: bool,
-    },
-    /// Run/Test a single exercise
-    Run {
-        /// The name of the exercise
-        name: String,
-    },
-    /// Reset a single exercise using "git stash -- <filename>"
-    Reset {
-        /// The name of the exercise
-        name: String,
-    },
-    /// Return a hint for the given exercise
-    Hint {
-        /// The name of the exercise
-        name: String,
-    },
-    /// List the exercises available in Rustlings
-    List {
-        /// Show only the paths of the exercises
-        #[arg(short, long)]
-        paths: bool,
-        /// Show only the names of the exercises
-        #[arg(short, long)]
-        names: bool,
-        /// Provide a string to match exercise names.
-        /// Comma separated patterns are accepted
-        #[arg(short, long)]
-        filter: Option<String>,
-        /// Display only exercises not yet solved
-        #[arg(short, long)]
-        unsolved: bool,
-        /// Display only exercises that have been solved
-        #[arg(short, long)]
-        solved: bool,
-    },
-    /// Enable rust-analyzer for exercises
-    Lsp,
+    Verify(VerifyArgs),
+    Watch(WatchArgs),
+    Run(RunArgs),
+    Reset(ResetArgs),
+    Hint(HintArgs),
+    List(ListArgs),
+    Lsp(LspArgs),
+    CicvVerify(CicvVerifyArgs)
 }
 
-fn main() {
-    let args = Args::parse();
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "cicvverify", description = "cicvverify")]
+struct CicvVerifyArgs {}
 
-    if args.command.is_none() {
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "verify")]
+/// Verifies all exercises according to the recommended order
+struct VerifyArgs {}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "watch")]
+/// Reruns `verify` when files were edited
+struct WatchArgs {
+    /// show hints on success
+    #[argh(switch)]
+    success_hints: bool,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "run")]
+/// Runs/Tests a single exercise
+struct RunArgs {
+    #[argh(positional)]
+    /// the name of the exercise
+    name: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "reset")]
+/// Resets a single exercise using "git stash -- <filename>"
+struct ResetArgs {
+    #[argh(positional)]
+    /// the name of the exercise
+    name: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "hint")]
+/// Returns a hint for the given exercise
+struct HintArgs {
+    #[argh(positional)]
+    /// the name of the exercise
+    name: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "lsp")]
+/// Enable rust-analyzer for exercises
+struct LspArgs {}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "list")]
+/// Lists the exercises available in Rustlings
+struct ListArgs {
+    #[argh(switch, short = 'p')]
+    /// show only the paths of the exercises
+    paths: bool,
+    #[argh(switch, short = 'n')]
+    /// show only the names of the exercises
+    names: bool,
+    #[argh(option, short = 'f')]
+    /// provide a string to match exercise names
+    /// comma separated patterns are acceptable
+    filter: Option<String>,
+    #[argh(switch, short = 'u')]
+    /// display only exercises not yet solved
+    unsolved: bool,
+    #[argh(switch, short = 's')]
+    /// display only exercises that have been solved
+    solved: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct ExerciseCheckList {
+    pub exercises: Vec<ExerciseResult>,
+    pub user_name: Option<String>,
+    pub statistics: ExerciseStatistics
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct ExerciseResult {
+    pub name: String,
+    pub result: bool
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct  ExerciseStatistics {
+    pub total_exercations: usize,
+    pub total_succeeds: usize,
+    pub total_failures: usize,
+    pub total_time: u32,
+}
+
+#[tokio::main]
+async fn main() {
+    let args: Args = argh::from_env();
+
+    if args.version {
+        println!("v{VERSION}");
+        std::process::exit(0);
+    }
+
+    if args.nested.is_none() {
         println!("\n{WELCOME}\n");
     }
 
@@ -111,30 +182,23 @@ fn main() {
     let exercises = toml::from_str::<ExerciseList>(toml_str).unwrap().exercises;
     let verbose = args.nocapture;
 
-    let command = args.command.unwrap_or_else(|| {
+    let command = args.nested.unwrap_or_else(|| {
         println!("{DEFAULT_OUT}\n");
         std::process::exit(0);
     });
-
     match command {
-        Subcommands::List {
-            paths,
-            names,
-            filter,
-            unsolved,
-            solved,
-        } => {
-            if !paths && !names {
+        Subcommands::List(subargs) => {
+            if !subargs.paths && !subargs.names {
                 println!("{:<17}\t{:<46}\t{:<7}", "Name", "Path", "Status");
             }
             let mut exercises_done: u16 = 0;
-            let filters = filter.clone().unwrap_or_default().to_lowercase();
+            let filters = subargs.filter.clone().unwrap_or_default().to_lowercase();
             exercises.iter().for_each(|e| {
                 let fname = format!("{}", e.path.display());
                 let filter_cond = filters
                     .split(',')
                     .filter(|f| !f.trim().is_empty())
-                    .any(|f| e.name.contains(f) || fname.contains(f));
+                    .any(|f| e.name.contains(&f) || fname.contains(&f));
                 let status = if e.looks_done() {
                     exercises_done += 1;
                     "Done"
@@ -142,14 +206,14 @@ fn main() {
                     "Pending"
                 };
                 let solve_cond = {
-                    (e.looks_done() && solved)
-                        || (!e.looks_done() && unsolved)
-                        || (!solved && !unsolved)
+                    (e.looks_done() && subargs.solved)
+                        || (!e.looks_done() && subargs.unsolved)
+                        || (!subargs.solved && !subargs.unsolved)
                 };
-                if solve_cond && (filter_cond || filter.is_none()) {
-                    let line = if paths {
+                if solve_cond && (filter_cond || subargs.filter.is_none()) {
+                    let line = if subargs.paths {
                         format!("{fname}\n")
-                    } else if names {
+                    } else if subargs.names {
                         format!("{}\n", e.name)
                     } else {
                         format!("{:<17}\t{fname:<46}\t{status:<7}\n", e.name)
@@ -179,30 +243,96 @@ fn main() {
             std::process::exit(0);
         }
 
-        Subcommands::Run { name } => {
-            let exercise = find_exercise(&name, &exercises);
-
+        Subcommands::Run(subargs) => {
+            let exercise = find_exercise(&subargs.name, &exercises);
             run(exercise, verbose).unwrap_or_else(|_| std::process::exit(1));
         }
 
-        Subcommands::Reset { name } => {
-            let exercise = find_exercise(&name, &exercises);
+        Subcommands::Reset(subargs) => {
+            let exercise = find_exercise(&subargs.name, &exercises);
 
             reset(exercise).unwrap_or_else(|_| std::process::exit(1));
         }
 
-        Subcommands::Hint { name } => {
-            let exercise = find_exercise(&name, &exercises);
+        Subcommands::Hint(subargs) => {
+            let exercise = find_exercise(&subargs.name, &exercises);
 
             println!("{}", exercise.hint);
         }
 
-        Subcommands::Verify => {
+        Subcommands::Verify(_subargs) => {
             verify(&exercises, (0, exercises.len()), verbose, false)
                 .unwrap_or_else(|_| std::process::exit(1));
         }
 
-        Subcommands::Lsp => {
+        Subcommands::CicvVerify(_subargs) => {
+            // let toml_str = &fs::read_to_string("info.toml").unwrap();
+            // exercises = toml::from_str::<ExerciseList>(toml_str).unwrap().exercises;
+            let now_start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+            let rights = Arc::new(Mutex::new(0));
+            let alls = exercises.len();
+
+            let exercise_check_list =  Arc::new(Mutex::new(
+                ExerciseCheckList {
+                    exercises: vec![], 
+                    user_name:  None, 
+                    statistics: ExerciseStatistics { 
+                        total_exercations: alls, 
+                        total_succeeds: 0, 
+                        total_failures: 0, 
+                        total_time: 0, 
+                    }
+                }
+            ));
+
+            let mut tasks = vec![];
+            for exercise in exercises {
+                let now_start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                let inner_exercise = exercise;
+                let c_mutex = Arc::clone(&rights);
+                let exercise_check_list_ref = Arc::clone(&exercise_check_list);
+                let _verbose = verbose.clone();
+                let t = tokio::task::spawn( async move {
+                    match run(&inner_exercise, true) {
+                    // match verify(vec![&inner_exercise], (0, 1), true, true) {
+                        Ok(_) => {
+                            *c_mutex.lock().unwrap() += 1;
+                            println!("{}执行成功", inner_exercise.name);
+                            println!("总的题目数: {}", alls);
+                            println!("当前做正确的题目数: {}", *c_mutex.lock().unwrap());
+                            let now_end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                            println!("当前修改试卷耗时: {} s", now_end - now_start);
+                            exercise_check_list_ref.lock().unwrap().exercises.push(ExerciseResult{ 
+                                name: inner_exercise.name, result: true,
+                            });
+                            exercise_check_list_ref.lock().unwrap().statistics.total_succeeds += 1;
+                        },
+                        Err(_) => {
+                            println!("{}执行失败", inner_exercise.name);
+                            println!("总的题目数: {}", alls);
+                            println!("当前做正确的题目数: {}", *c_mutex.lock().unwrap());
+                            let now_end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                            println!("当前修改试卷耗时: {} s", now_end - now_start);
+                            exercise_check_list_ref.lock().unwrap().exercises.push(ExerciseResult{ 
+                                name: inner_exercise.name, result: false,
+                            });
+                            exercise_check_list_ref.lock().unwrap().statistics.total_failures += 1;
+                        }
+                    }
+                });
+                tasks.push(t);
+            }
+            for task in tasks { task.await.unwrap(); }
+            let now_end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+            let total_time = now_end - now_start;
+            println!("===============================试卷批改完成,总耗时: {} s; ==================================", total_time);
+            let exercise_check_list_ref = Arc::clone(&exercise_check_list);
+            exercise_check_list_ref.lock().unwrap().statistics.total_time = total_time as u32;
+            let serialized = serde_json::to_string_pretty(&*exercise_check_list.lock().unwrap()).unwrap();
+            fs::write(".github/result/check_result.json", serialized).unwrap();
+        },
+
+        Subcommands::Lsp(_subargs) => {
             let mut project = RustAnalyzerProject::new();
             project
                 .get_sysroot_src()
@@ -221,7 +351,7 @@ fn main() {
             }
         }
 
-        Subcommands::Watch { success_hints } => match watch(&exercises, verbose, success_hints) {
+        Subcommands::Watch(_subargs) => match watch(&exercises, verbose, _subargs.success_hints) {
             Err(e) => {
                 println!(
                     "Error: Could not watch your progress. Error message was {:?}.",
@@ -394,7 +524,7 @@ fn watch(
 
 fn rustc_exists() -> bool {
     Command::new("rustc")
-        .args(["--version"])
+        .args(&["--version"])
         .stdout(Stdio::null())
         .spawn()
         .and_then(|mut child| child.wait())
@@ -430,7 +560,7 @@ started, here's a couple of notes about how Rustlings operates:
 Got all that? Great! To get started, run `rustlings watch` in order to get the first
 exercise. Make sure to have your editor open!"#;
 
-const FENISH_LINE: &str = r"+----------------------------------------------------+
+const FENISH_LINE: &str = r#"+----------------------------------------------------+
 |          You made it to the Fe-nish line!          |
 +--------------------------  ------------------------+
                           \\/
@@ -455,12 +585,12 @@ If you noticed any issues, please don't hesitate to report them to our repo.
 You can also contribute your own exercises to help the greater community!
 
 Before reporting an issue or contributing, please read our guidelines:
-https://github.com/rust-lang/rustlings/blob/main/CONTRIBUTING.md";
+https://github.com/rust-lang/rustlings/blob/main/CONTRIBUTING.md"#;
 
-const WELCOME: &str = r"       welcome to...
+const WELCOME: &str = r#"       welcome to...
                  _   _ _
   _ __ _   _ ___| |_| (_)_ __   __ _ ___
  | '__| | | / __| __| | | '_ \ / _` / __|
  | |  | |_| \__ \ |_| | | | | | (_| \__ \
  |_|   \__,_|___/\__|_|_|_| |_|\__, |___/
-                               |___/";
+                               |___/"#;

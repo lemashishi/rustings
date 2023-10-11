@@ -12,6 +12,7 @@ const RUSTC_EDITION_ARGS: &[&str] = &["--edition", "2021"];
 const I_AM_DONE_REGEX: &str = r"(?m)^\s*///?\s*I\s+AM\s+NOT\s+DONE";
 const CONTEXT: usize = 2;
 const CLIPPY_CARGO_TOML_PATH: &str = "./exercises/clippy/Cargo.toml";
+const BUILD_SCRIPT_CARGO_TOML_PATH: &str = "./exercises/tests/Cargo.toml";
 
 // Get a temporary file name that is hopefully unique
 #[inline]
@@ -34,6 +35,8 @@ pub enum Mode {
     Test,
     // Indicates that the exercise should be linted with clippy
     Clippy,
+    // Indicates that the exercise should be run using cargo with build script
+    BuildScript,
 }
 
 #[derive(Deserialize)]
@@ -110,12 +113,12 @@ impl Exercise {
     pub fn compile(&self) -> Result<CompiledExercise, ExerciseOutput> {
         let cmd = match self.mode {
             Mode::Compile => Command::new("rustc")
-                .args([self.path.to_str().unwrap(), "-o", &temp_file()])
+                .args(&[self.path.to_str().unwrap(), "-o", &temp_file()])
                 .args(RUSTC_COLOR_ARGS)
                 .args(RUSTC_EDITION_ARGS)
                 .output(),
             Mode::Test => Command::new("rustc")
-                .args(["--test", self.path.to_str().unwrap(), "-o", &temp_file()])
+                .args(&["--test", self.path.to_str().unwrap(), "-o", &temp_file()])
                 .args(RUSTC_COLOR_ARGS)
                 .args(RUSTC_EDITION_ARGS)
                 .output(),
@@ -141,7 +144,7 @@ path = "{}.rs""#,
                 // compilation failure, this would silently fail. But we expect
                 // clippy to reflect the same failure while compiling later.
                 Command::new("rustc")
-                    .args([self.path.to_str().unwrap(), "-o", &temp_file()])
+                    .args(&[self.path.to_str().unwrap(), "-o", &temp_file()])
                     .args(RUSTC_COLOR_ARGS)
                     .args(RUSTC_EDITION_ARGS)
                     .output()
@@ -151,14 +154,36 @@ path = "{}.rs""#,
                 // This is already fixed on Clippy's master branch. See this issue to track merging into Cargo:
                 // https://github.com/rust-lang/rust-clippy/issues/3837
                 Command::new("cargo")
-                    .args(["clean", "--manifest-path", CLIPPY_CARGO_TOML_PATH])
+                    .args(&["clean", "--manifest-path", CLIPPY_CARGO_TOML_PATH])
                     .args(RUSTC_COLOR_ARGS)
                     .output()
                     .expect("Failed to run 'cargo clean'");
                 Command::new("cargo")
-                    .args(["clippy", "--manifest-path", CLIPPY_CARGO_TOML_PATH])
+                    .args(&["clippy", "--manifest-path", CLIPPY_CARGO_TOML_PATH])
                     .args(RUSTC_COLOR_ARGS)
-                    .args(["--", "-D", "warnings", "-D", "clippy::float_cmp"])
+                    .args(&["--", "-D", "warnings", "-D", "clippy::float_cmp"])
+                    .output()
+            },
+            Mode::BuildScript => {
+                let cargo_toml = format!(
+                    r#"[package]
+name = "{}"
+version = "0.0.1"
+edition = "2021"
+[[bin]]
+name = "{}"
+path = "{}.rs""#,
+                    self.name, self.name, self.name
+                );
+                let cargo_toml_error_msg = if env::var("NO_EMOJI").is_ok() {
+                    "Failed to write Clippy Cargo.toml file."
+                } else {
+                    "Failed to write 📎 Clippy 📎 Cargo.toml file."
+                };
+                fs::write(BUILD_SCRIPT_CARGO_TOML_PATH, cargo_toml).expect(cargo_toml_error_msg);
+
+                Command::new("cargo")
+                    .args(&["test", "--manifest-path", BUILD_SCRIPT_CARGO_TOML_PATH])
                     .output()
             }
         }
@@ -181,9 +206,14 @@ path = "{}.rs""#,
     fn run(&self) -> Result<ExerciseOutput, ExerciseOutput> {
         let arg = match self.mode {
             Mode::Test => "--show-output",
+            Mode::BuildScript => return Ok(ExerciseOutput {
+                stdout: "".to_string(),
+                stderr: "".to_string(),
+            }),
             _ => "",
         };
-        let cmd = Command::new(temp_file())
+        println!("pa={}", temp_file());
+        let cmd = Command::new(&temp_file())
             .arg(arg)
             .output()
             .expect("Failed to run 'run' command");
@@ -260,7 +290,7 @@ impl Display for Exercise {
 
 #[inline]
 fn clean() {
-    let _ignored = remove_file(temp_file());
+    let _ignored = remove_file(&temp_file());
 }
 
 #[cfg(test)]
@@ -270,7 +300,7 @@ mod test {
 
     #[test]
     fn test_clean() {
-        File::create(temp_file()).unwrap();
+        File::create(&temp_file()).unwrap();
         let exercise = Exercise {
             name: String::from("example"),
             path: PathBuf::from("tests/fixture/state/pending_exercise.rs"),
